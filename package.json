@@ -1,0 +1,32 @@
+{
+  "name": "clone-campus-connect",
+  "version": "1.0.0",
+  "description": "Projeto de prototipação e testes do campus connect",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "lint:check": "prettier --check .",
+    "lint:fix": "prettier --write .",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MatheusBarbosaDeAndrade/clone-campus-connect.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/MatheusBarbosaDeAndrade/clone-campus-connect/issues"
+  },
+  "homepage": "https://github.com/MatheusBarbosaDeAndrade/clone-campus-connect#readme",
+  "dependencies": {
+    "next": "^16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "jest": "^30.5.2",
+    "prettier": "^3.9.10"
+  }
+}

@@ -1,0 +1,10 @@
+.git
+.next
+.swc
+node_modules
+.env*
+!.env.production.example
+test
+referencias_visuais
+infra/production/backups
+*.md

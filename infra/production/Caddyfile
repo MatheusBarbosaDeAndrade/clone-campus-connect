@@ -1,0 +1,24 @@
+# Proxy reverso com HTTPS automático (Let's Encrypt). Basta o domínio em
+# APP_DOMAIN apontar (DNS tipo A/AAAA) para o IP do servidor e as portas
+# 80 e 443 estarem abertas.
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Anexos têm até 10 MB; folga para o restante da requisição.
+	request_body {
+		max_size 12MB
+	}
+
+	# O Caddy envia o IP real do cliente em X-Forwarded-For (por isso a
+	# aplicação roda com TRUST_PROXY=true). O app não é exposto diretamente.
+	reverse_proxy app:3000
+
+	log {
+		output stdout
+		format console
+	}
+}

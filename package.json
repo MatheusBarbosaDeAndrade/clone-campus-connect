@@ -1,17 +1,32 @@
 {
   "name": "clone-campus-connect",
   "version": "1.0.0",
-  "description": "Projeto de prototipação e testes do campus connect",
-  "main": "index.js",
+  "description": "CampusConnect - plataforma de gerenciamento de chamados acadêmicos",
   "scripts": {
-    "dev": "npm run services:up && next dev",
+    "dev": "npm run services:up && npm run services:wait && npm run migrations:up && next dev",
+    "build": "next build",
+    "vercel-build": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON infra/scripts/vercel-build.js",
+    "start": "next start",
+    "start:local": "node --env-file=.env.development --disable-warning=MODULE_TYPELESS_PACKAGE_JSON node_modules/next/dist/bin/next start",
     "services:up": "docker compose -p campusconnect -f infra/compose.yaml up -d",
     "services:stop": "docker compose -p campusconnect -f infra/compose.yaml stop",
     "services:down": "docker compose -p campusconnect -f infra/compose.yaml down",
+    "services:wait": "node --env-file=.env.development --disable-warning=MODULE_TYPELESS_PACKAGE_JSON infra/scripts/wait-for-services.js",
+    "migrations:up": "node --env-file=.env.development --disable-warning=MODULE_TYPELESS_PACKAGE_JSON infra/scripts/migrate.js",
+    "seed": "node --env-file=.env.development --disable-warning=MODULE_TYPELESS_PACKAGE_JSON infra/scripts/seed.js",
+    "db:reset": "node --env-file=.env.development --disable-warning=MODULE_TYPELESS_PACKAGE_JSON infra/scripts/seed.js --reset",
+    "manager:create": "node --env-file=.env.development --disable-warning=MODULE_TYPELESS_PACKAGE_JSON infra/scripts/create-manager.js",
+    "maintenance:cleanup": "node --env-file=.env.development --disable-warning=MODULE_TYPELESS_PACKAGE_JSON infra/scripts/cleanup.js",
+    "prod:up": "docker compose --env-file .env.production -f infra/production/compose.yaml -p campusconnect-prod up -d --build",
+    "prod:down": "docker compose --env-file .env.production -f infra/production/compose.yaml -p campusconnect-prod down",
+    "prod:logs": "docker compose --env-file .env.production -f infra/production/compose.yaml -p campusconnect-prod logs -f --tail=100",
+    "prod:manager:create": "docker compose --env-file .env.production -f infra/production/compose.yaml -p campusconnect-prod run --rm -e MANAGER_NAME -e MANAGER_EMAIL -e MANAGER_PASSWORD -e MANAGER_PHONE app node infra/scripts/create-manager.js",
+    "prod:backup:now": "docker compose --env-file .env.production -f infra/production/compose.yaml -p campusconnect-prod exec backup sh -c 'pg_dump --format=custom --no-owner --file=/backups/manual-$(date -u +%Y%m%dT%H%M%SZ).dump && ls -lh /backups'",
     "lint:check": "prettier --check .",
     "lint:fix": "prettier --write .",
-    "test": "jest",
-    "test:watch": "jest --watchAll"
+    "lint:eslint": "eslint .",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watchAll --runInBand"
   },
   "repository": {
     "type": "git",
@@ -25,12 +40,21 @@
   "homepage": "https://github.com/MatheusBarbosaDeAndrade/clone-campus-connect#readme",
   "dependencies": {
     "next": "^16.4.3",
+    "nodemailer": "^10.4.0",
     "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.3",
     "jest": "^30.5.2",
-    "prettier": "^3.9.10"
+    "postcss": "^8.5.32",
+    "prettier": "^3.9.10",
+    "tailwindcss": "^4.3.5"
+  },
+  "engines": {
+    "node": ">=22.9.0"
   }
 }

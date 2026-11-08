@@ -1,0 +1,139 @@
+# Stack de produção para um servidor (VPS) com Docker.
+# Uso (na raiz do projeto):
+#   docker compose --env-file .env.production -f infra/production/compose.yaml -p campusconnect-prod up -d --build
+# ou simplesmente: npm run prod:up
+name: campusconnect-prod
+
+x-app-env: &app-env
+  NODE_ENV: production
+  NODE_OPTIONS: --disable-warning=MODULE_TYPELESS_PACKAGE_JSON
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB}
+  POSTGRES_USER: ${APP_DB_USER:?defina APP_DB_USER}
+  POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?defina APP_DB_PASSWORD}
+  # Banco e app conversam pela rede interna do Docker, no mesmo servidor.
+  POSTGRES_SSL: "false"
+  APP_URL: https://${APP_DOMAIN:?defina APP_DOMAIN}
+  APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+  TRUST_PROXY: "true"
+  EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:?defina EMAIL_SMTP_HOST}
+  EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-465}
+  EMAIL_SMTP_SECURE: ${EMAIL_SMTP_SECURE:-true}
+  EMAIL_SMTP_USER: ${EMAIL_SMTP_USER:-}
+  EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
+  EMAIL_FROM: ${EMAIL_FROM:?defina EMAIL_FROM}
+  PRIVACY_CONTROLLER_NAME: ${PRIVACY_CONTROLLER_NAME:-}
+  PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL:-}
+  PRIVACY_LEGAL_BASIS: ${PRIVACY_LEGAL_BASIS:-}
+
+services:
+  db:
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    environment:
+      # Superusuário: usado só na inicialização e para administração manual.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?defina POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Usuário da aplicação (sem superusuário), criado por db-init/.
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    # Sem "ports": o banco NÃO fica acessível de fora do servidor.
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Aplica as migrations pendentes e termina; o app só sobe depois.
+  migrate:
+    build: ../..
+    image: campusconnect-app:latest
+    command: ["node", "infra/scripts/migrate.js"]
+    environment: *app-env
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+    restart: "no"
+
+  app:
+    image: campusconnect-app:latest
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # "public" dá saída para a internet (envio de e-mails pelo SMTP).
+    networks: [internal, public]
+
+  # Limpeza diária de sessões, tokens e registros de tentativas vencidos.
+  cleanup:
+    image: campusconnect-app:latest
+    restart: unless-stopped
+    command:
+      [
+        "sh",
+        "-c",
+        "while true; do node infra/scripts/cleanup.js; sleep 86400; done",
+      ]
+    environment: *app-env
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+
+  # Backup diário do banco em ./backups (copie para fora do servidor!).
+  backup:
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    entrypoint: ["sh", "/backup.sh"]
+    environment:
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${APP_DB_USER}
+      PGPASSWORD: ${APP_DB_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?defina ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [app]
+    networks: [internal, public]
+
+networks:
+  internal:
+    internal: true
+  public:
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
